@@ -34,21 +34,21 @@ def save_state(state):
 
 def update_temporal_risk(events):
     """
-    Update temporal risk state based on behavioral events.
+    Temporal risk engine.
 
-    Design principles:
-    - Persistence is context, never evidence
-    - Only behavioral change increases risk
-    - Decay applies once per update, not per event
+    Principles:
+    - Persistence is context, not evidence
+    - Risk increases only on behavioral change
+    - Persistence amplifies confidence ONCE per scan
+    - Decay applies once per scan
     """
 
     state = load_state()
     now = time.time()
 
-    # Track which PIDs were updated this cycle
     touched_pids = set()
 
-    # ---------- process events ----------
+    # ---------- EVENT PROCESSING ----------
     for event in events:
         pid = str(event["pid"])
         etype = event["event"]
@@ -65,14 +65,18 @@ def update_temporal_risk(events):
         entry = state[pid]
         touched_pids.add(pid)
 
-        # Update counters (JSON-safe)
+        # Count events (JSON-safe)
         entry["event_counts"][etype] = entry["event_counts"].get(etype, 0) + 1
         entry["last_seen"] = now
 
-        # Apply event weight (persistence has zero weight)
+        # Apply direct event weight
         entry["risk_score"] += EVENT_WEIGHTS.get(etype, 0)
 
-        # Persistence amplifier (confidence, not suspicion)
+    # ---------- PER-PID REASONING ----------
+    for pid in touched_pids:
+        entry = state[pid]
+
+        # Persistence amplifier (ONCE per PID per update)
         has_persistence = entry["event_counts"].get("HOOK_PERSISTED", 0) >= 2
         has_real_signal = (
             entry["event_counts"].get("HOOK_APPEARED", 0) > 0 or
@@ -82,11 +86,7 @@ def update_temporal_risk(events):
         if has_persistence and has_real_signal:
             entry["risk_score"] += 5
 
-    # ---------- apply decay & classify ----------
-    for pid in touched_pids:
-        entry = state[pid]
-
-        # Apply decay once per update
+        # Apply decay ONCE per update
         entry["risk_score"] = max(
             0,
             entry["risk_score"] - DECAY_PER_UPDATE
