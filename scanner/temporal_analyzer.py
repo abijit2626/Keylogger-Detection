@@ -23,17 +23,17 @@ def load_snapshots():
 
 
 def index_hooks(snapshot):
-   
+    """
+    Returns:
+      { pid: set(hook_owners) }
+    """
     hooks = {}
 
     for entry in snapshot.get("keyboard_hook_suspects", []):
         pid = entry["pid"]
 
-        # DLL-based hook suspects
         if "suspicious_modules" in entry:
             dlls = {m["dll"] for m in entry["suspicious_modules"]}
-
-        # EXE-based hook suspects
         else:
             exe = entry.get("executable")
             dlls = {exe} if exe else set()
@@ -63,6 +63,18 @@ def analyze():
     events = []
 
     for pid, records in history.items():
+        if len(records) < 2:
+            continue
+
+        # ---- persistence (STATE, emit once) ----
+        events.append({
+            "event": "HOOK_PERSISTED",
+            "pid": pid,
+            "time": records[-1]["time"],
+            "dlls": list(records[-1]["dlls"])
+        })
+
+        # ---- change detection (EVENTS) ----
         for i in range(1, len(records)):
             prev = records[i - 1]
             curr = records[i]
@@ -71,15 +83,6 @@ def analyze():
             if not prev["dlls"] and curr["dlls"]:
                 events.append({
                     "event": "HOOK_APPEARED",
-                    "pid": pid,
-                    "time": curr["time"],
-                    "dlls": list(curr["dlls"])
-                })
-
-            # Hook persisted
-            if prev["dlls"] and curr["dlls"]:
-                events.append({
-                    "event": "HOOK_PERSISTED",
                     "pid": pid,
                     "time": curr["time"],
                     "dlls": list(curr["dlls"])
@@ -105,7 +108,7 @@ def analyze():
                     "dlls": list(removed)
                 })
 
-    with open(OUTPUT_FILE, "w") as f:
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(events, f, indent=2)
 
     print("\n========== TEMPORAL KEYBOARD HOOK REPORT ==========\n")
@@ -121,3 +124,4 @@ def analyze():
 
 if __name__ == "__main__":
     analyze()
+
