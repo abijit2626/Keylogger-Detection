@@ -3,36 +3,28 @@ import sys
 import json
 from datetime import datetime, UTC
 
-#  OS GUARD 
 if os.name != "nt":
-    print("[!] This scanner only runs on Windows.")
+    print("[!] Windows only.")
     sys.exit(1)
 
-# IMPORT DETECTORS 
 from scanner.keyboard_hook_detector import detect_keyboard_hook_suspects
-
-
 
 
 def main():
     os.makedirs("snapshots", exist_ok=True)
 
-    print("[*] Scanning processes...")
+    suspects = detect_keyboard_hook_suspects()
 
-    # Run keyboard hook detector
-    keyboard_hooks = detect_keyboard_hook_suspects()
-
-    results = {
+    result = {
         "timestamp": datetime.now(UTC).isoformat(),
-        "keyboard_hook_suspects": keyboard_hooks
+        "keyboard_hook_suspects": suspects
     }
 
-    filename = f"snapshots/scan_{results['timestamp'].replace(':', '-')}.json"
+    fname = f"snapshots/scan_{result['timestamp'].replace(':','-')}.json"
+    with open(fname, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2)
 
-    with open(filename, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2)
-
-    print(f"[+] Scan complete -> {filename}")
+    print(f"[+] Snapshot written: {fname}")
 
 
 if __name__ == "__main__":
