@@ -7,13 +7,15 @@ STATE_FILE = "temporal_state.json"
 EVENT_WEIGHTS = {
     "HOOK_APPEARED": 8,
     "NEW_HOOK_MODULE": 30,
-    "HOOK_REMOVED": -5,
-    "HOOK_PERSISTED": 0
+    "HOOK_REMOVED": -5
 }
 
 DECAY = 2
 MEDIUM = 30
 HIGH = 60
+
+# seconds the identity must live before we consider it persistent
+PERSISTENCE_THRESHOLD = 120  # one scan interval
 
 
 def load_state():
@@ -33,6 +35,7 @@ def update_temporal_risk(events):
     now = time.time()
     touched = set()
 
+    # --- ingest real events only ---
     for e in events:
         identity = e["identity"]
         etype = e["event"]
@@ -54,16 +57,26 @@ def update_temporal_risk(events):
         s["risk_score"] += EVENT_WEIGHTS.get(etype, 0)
         s["last_seen"] = now
 
+    # --- infer persistence + decay ---
     for identity in touched:
         s = state[identity]
-        if s["event_counts"].get("HOOK_PERSISTED", 0) >= 2 and (
-            s["event_counts"].get("HOOK_APPEARED", 0) or
-            s["event_counts"].get("NEW_HOOK_MODULE", 0)
-        ):
+
+        lifetime = s["last_seen"] - s["first_seen"]
+        is_persistent = lifetime >= PERSISTENCE_THRESHOLD
+
+        has_real_signal = (
+            s["event_counts"].get("HOOK_APPEARED", 0) > 0 or
+            s["event_counts"].get("NEW_HOOK_MODULE", 0) > 0
+        )
+
+        # persistence only boosts confidence after a real signal
+        if is_persistent and has_real_signal:
             s["risk_score"] += 5
 
+        # decay always applies
         s["risk_score"] = max(0, s["risk_score"] - DECAY)
 
+        # classify
         if s["risk_score"] >= HIGH:
             s["risk_level"] = "HIGH"
         elif s["risk_score"] >= MEDIUM:
@@ -73,4 +86,3 @@ def update_temporal_risk(events):
 
     save_state(state)
     return state
-

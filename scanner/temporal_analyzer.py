@@ -27,10 +27,12 @@ def analyze():
 
     history = defaultdict(list)
 
+    # Build identity timelines
     for snap in snaps:
         for e in snap["data"].get("keyboard_hook_suspects", []):
             if "create_time" not in e:
                 continue
+
             identity = build_identity(e)
             history[identity].append({
                 "time": snap["time"],
@@ -41,23 +43,12 @@ def analyze():
 
     events = []
 
+    # Emit ONLY change events
     for identity, records in history.items():
-        if len(records) < 2:
-            continue
-
-        latest = records[-1]
-
-        events.append({
-            "event": "HOOK_PERSISTED",
-            "identity": identity,
-            "exe": latest["exe"],
-            "pid": latest["pid"],
-            "time": latest["time"]
-        })
-
         for i in range(1, len(records)):
             prev, curr = records[i - 1], records[i]
 
+            # First appearance of hook capability
             if not prev["dlls"] and curr["dlls"]:
                 events.append({
                     "event": "HOOK_APPEARED",
@@ -67,6 +58,7 @@ def analyze():
                     "time": curr["time"]
                 })
 
+            # New hook carrier introduced
             new = curr["dlls"] - prev["dlls"]
             if new:
                 events.append({
@@ -77,6 +69,7 @@ def analyze():
                     "time": curr["time"]
                 })
 
+            # Hook capability removed
             removed = prev["dlls"] - curr["dlls"]
             if removed:
                 events.append({
