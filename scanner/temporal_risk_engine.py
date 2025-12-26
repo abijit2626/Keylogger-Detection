@@ -69,3 +69,5 @@ def update_temporal_risk(events):
 
     save_state(state)
     return state
+
+
