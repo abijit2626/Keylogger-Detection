@@ -1,0 +1,4 @@
+venv/
+# Debug helpers (local only)
+debug_modules.py
+debug_processes.py
