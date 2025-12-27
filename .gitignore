@@ -19,3 +19,10 @@ snapshots/*.json
 temporal_events.json
 temporal_state.json
 *.tmp
+
+# Demo and Tests (ignored)
+DEMO.md
+TESTING.md
+test_full_system.py
+test_scanner.py
+demo_threat.py
