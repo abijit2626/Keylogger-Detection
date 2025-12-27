@@ -14,6 +14,7 @@ DECAY = 3
 MEDIUM = 30
 HIGH = 60
 
+
 print("[DEBUG] RISK ENGINE:", __file__)
 
 

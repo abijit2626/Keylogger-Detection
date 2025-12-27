@@ -7,6 +7,7 @@ OUTPUT_FILE = "temporal_events.json"
 
 print("[DEBUG] ANALYZER:", __file__)
 
+
 def load_snapshots():
     files = sorted(f for f in os.listdir(SNAPSHOT_DIR) if f.endswith(".json"))
     snapshots = []

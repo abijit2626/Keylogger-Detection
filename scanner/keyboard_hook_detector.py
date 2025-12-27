@@ -6,6 +6,7 @@ import subprocess
 WINDOWS_DIR = os.environ.get("WINDIR", "C:\\Windows").lower()
 
 
+
 def is_signed(path):
     try:
         out = subprocess.check_output(

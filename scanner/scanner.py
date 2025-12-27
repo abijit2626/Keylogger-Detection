@@ -7,6 +7,7 @@ if os.name != "nt":
     print("[!] Windows only.")
     sys.exit(1)
 
+
 from scanner.keyboard_hook_detector import detect_keyboard_hook_suspects
 
 
