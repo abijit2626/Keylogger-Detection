@@ -3,15 +3,15 @@ import os
 import hashlib
 import subprocess
 import time
+from functools import lru_cache
 
 from scanner.logger_config import setup_logger
-
-WINDOWS_DIR = os.environ.get("WINDIR", "C:\\Windows").lower()
+from scanner.config import WINDOWS_DIR
 
 logger = setup_logger(__name__)
 
 
-
+@lru_cache(maxsize=1024)
 def is_signed(path):
     """Check if a file has a valid digital signature."""
     try:

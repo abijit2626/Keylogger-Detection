@@ -87,11 +87,21 @@ def analyze():
                 continue
 
             identity = build_identity(e)
+            
+            # Helper to extract DLL set safely
+            current_dlls = set()
+            if "suspicious_modules" in e and e["suspicious_modules"]:
+                for m in e["suspicious_modules"]:
+                     if isinstance(m, dict) and "dll" in m:
+                         current_dlls.add(m["dll"])
+                     elif isinstance(m, str):
+                         current_dlls.add(m)
+            
             history[identity].append({
                 "time": snap["time"],
                 "pid": e["pid"],
                 "exe": e["executable"],
-                "dlls": {m["dll"] for m in e.get("suspicious_modules", [])}
+                "dlls": current_dlls
             })
 
     logger.debug(f"Built history for {len(history)} unique process identities")
@@ -139,44 +149,61 @@ def analyze():
 
     try:
         temp_file = OUTPUT_FILE + ".tmp"
-        with open(temp_file, "w", encoding="utf-8") as f:
-            # Lock file for exclusive write access
+        
+        # Retry mechanism for file operations
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                if os.name == 'nt':
-                    import msvcrt
-                    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                with open(temp_file, "w", encoding="utf-8") as f:
+                    # Lock file for exclusive write access
+                    try:
+                        if os.name == 'nt':
+                            import msvcrt
+                            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                        else:
+                            import fcntl
+                            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                    except (ImportError, AttributeError, OSError):
+                        # Fallback: continue without locking if not available
+                        logger.warning("File locking not available or failed on this platform")
+                    
+                    json.dump(events, f, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())  # Force write to disk
+                    
+                    # Unlock before closing
+                    try:
+                        if os.name == 'nt':
+                            import msvcrt
+                            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+                        else:
+                            import fcntl
+                            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                    except (ImportError, AttributeError, OSError):
+                        pass
+                break # Success
+            except PermissionError:
+                if attempt < max_retries - 1:
+                    time.sleep(0.2)
                 else:
-                    import fcntl
-                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            except (ImportError, AttributeError):
-                logger.warning("File locking not available on this platform")
-            
-            json.dump(events, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-            
-            # Unlock
-            try:
-                if os.name == 'nt':
-                    import msvcrt
-                    msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    import fcntl
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-            except (ImportError, AttributeError):
-                pass
+                    raise
         
         # Atomic rename
         if os.name == 'nt':
             if os.path.exists(OUTPUT_FILE):
-                os.remove(OUTPUT_FILE)
+                try:
+                    os.remove(OUTPUT_FILE)
+                except OSError:
+                    # If remove fails, it might be locked. Wait and retry.
+                    time.sleep(0.2)
+                    os.remove(OUTPUT_FILE)
             os.rename(temp_file, OUTPUT_FILE)
         else:
             os.rename(temp_file, OUTPUT_FILE)
             
         logger.info(f"Temporal events written: {OUTPUT_FILE} ({len(events)} events)")
     except IOError as e:
-        logger.error(f"Failed to write temporal events to {OUTPUT_FILE}: {e}")
+        logger.error(f"Failed to write temporal events to {OUTPUT_FILE} (Step: Write/Rename): {e}")
         temp_file = OUTPUT_FILE + ".tmp"
         if os.path.exists(temp_file):
             try:

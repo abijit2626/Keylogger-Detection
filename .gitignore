@@ -13,3 +13,9 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+
+# Runtime Data and State
+snapshots/*.json
+temporal_events.json
+temporal_state.json
+*.tmp

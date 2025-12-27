@@ -3,18 +3,11 @@ import json
 import os
 
 from scanner.logger_config import setup_logger
+from scanner.config import (
+    EVENT_WEIGHTS, RISK_DECAY, RISK_MEDIUM_THRESHOLD, RISK_HIGH_THRESHOLD
+)
 
 STATE_FILE = "temporal_state.json"
-
-EVENT_WEIGHTS = {
-    "HOOK_APPEARED": 10,     # weak-to-medium signal
-    "NEW_HOOK_MODULE": 35,   # strong signal
-    "HOOK_REMOVED": -10     # relief
-}
-
-DECAY = 3
-MEDIUM = 30
-HIGH = 60
 
 logger = setup_logger(__name__)
 
@@ -37,47 +30,63 @@ def load_state():
 def save_state(state):
     """Save temporal risk state to file with locking."""
     temp_file = STATE_FILE + ".tmp"
+    
+    # Retry mechanism for file operations
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Write to temp file first
+            with open(temp_file, "w", encoding="utf-8") as f:
+                # Lock file for exclusive write access
+                try:
+                    if os.name == 'nt':
+                        import msvcrt
+                        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                except (ImportError, AttributeError, OSError):
+                    # Fallback: continue without locking if not available
+                    logger.warning("File locking not available or failed on this platform")
+                
+                json.dump(state, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())  # Force write to disk
+                
+                # Unlock before closing
+                try:
+                    if os.name == 'nt':
+                        import msvcrt
+                        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                except (ImportError, AttributeError, OSError):
+                    pass
+            break # Success
+        except PermissionError:
+             if attempt < max_retries - 1:
+                 time.sleep(0.2)
+             else:
+                 raise
+
     try:
-        # Write to temp file first
-        with open(temp_file, "w", encoding="utf-8") as f:
-            # Lock file for exclusive write access
-            try:
-                if os.name == 'nt':
-                    import msvcrt
-                    msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
-                else:
-                    import fcntl
-                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            except (ImportError, AttributeError):
-                # Fallback: continue without locking if not available
-                logger.warning("File locking not available on this platform")
-            
-            json.dump(state, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())  # Force write to disk
-            
-            # Unlock before closing
-            try:
-                if os.name == 'nt':
-                    import msvcrt
-                    msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    import fcntl
-                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-            except (ImportError, AttributeError):
-                pass
-        
         # Atomic rename (Windows needs special handling)
         if os.name == 'nt':
             if os.path.exists(STATE_FILE):
-                os.remove(STATE_FILE)
+                try:
+                    os.remove(STATE_FILE)
+                except OSError:
+                     # If remove fails, it might be locked. Wait and retry.
+                     time.sleep(0.2)
+                     os.remove(STATE_FILE)
             os.rename(temp_file, STATE_FILE)
         else:
             os.rename(temp_file, STATE_FILE)
             
         logger.debug(f"Saved state for {len(state)} process identities to {STATE_FILE}")
     except IOError as e:
-        logger.error(f"Failed to save state to {STATE_FILE}: {e}")
+        logger.error(f"Failed to save state to {STATE_FILE} (Step: Write/Rename): {e}")
         # Clean up temp file on error
         if os.path.exists(temp_file):
             try:
@@ -129,26 +138,15 @@ def update_temporal_risk(events):
     for identity, s in state.items():
         old_level = s["risk_level"]
         
-        if identity in touched:
-            # Already updated with new events, apply standard decay
-            s["risk_score"] = max(0, s["risk_score"] - DECAY)
-        else:
-            # Apply time-based decay for identities not seen in this cycle
-            last_seen = s.get("last_seen", s.get("first_seen", now))
-            time_since_seen = now - last_seen
-            
-            # Decay every DECAY seconds (calculate how many decay intervals passed)
-            if time_since_seen > DECAY:
-                decay_intervals = int(time_since_seen / DECAY)
-                s["risk_score"] = max(0, s["risk_score"] - (DECAY * decay_intervals))
-            
-            # Update last_seen to prevent excessive decay in next cycle
-            s["last_seen"] = now
+        # Apply standard decay to everyone
+        # We assume this function is called once per analysis cycle
+        s["risk_score"] = max(0, s["risk_score"] - RISK_DECAY)
+        s["last_seen"] = now
 
         # Update risk level classification
-        if s["risk_score"] >= HIGH:
+        if s["risk_score"] >= RISK_HIGH_THRESHOLD:
             s["risk_level"] = "HIGH"
-        elif s["risk_score"] >= MEDIUM:
+        elif s["risk_score"] >= RISK_MEDIUM_THRESHOLD:
             s["risk_level"] = "MEDIUM"
         else:
             s["risk_level"] = "LOW"

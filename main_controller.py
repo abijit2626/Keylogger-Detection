@@ -6,9 +6,7 @@ import sys
 
 from scanner.temporal_risk_engine import update_temporal_risk
 from scanner.logger_config import setup_logger
-
-SCAN_INTERVAL = 120
-ANALYZE_EVERY = 3
+from scanner.config import SCAN_INTERVAL, ANALYZE_EVERY
 
 SCANNER = "scanner.scanner"
 ANALYZER = "scanner.temporal_analyzer"
