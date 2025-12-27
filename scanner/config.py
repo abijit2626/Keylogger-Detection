@@ -5,7 +5,7 @@ import os
 
 # --- Controller Settings ---
 # Time between scan cycles in seconds
-SCAN_INTERVAL = 120 
+SCAN_INTERVAL = 10 
 
 # Run analysis after this many scan cycles
 ANALYZE_EVERY = 3
@@ -23,6 +23,7 @@ RISK_HIGH_THRESHOLD = 60
 # Event Risk Weights
 # Positive = Adds risk, Negative = Reduces risk
 EVENT_WEIGHTS = {
+    "SUSPECT_DETECTED": 20,  # Initial detection of a suspicious process
     "HOOK_APPEARED": 10,     # weak-to-medium signal
     "NEW_HOOK_MODULE": 35,   # strong signal
     "HOOK_REMOVED": -10      # relief

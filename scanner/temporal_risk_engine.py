@@ -105,7 +105,19 @@ def update_temporal_risk(events):
     touched = set()
 
     # --- ingest change events only ---
+    last_processed_time = state.get("_meta", {}).get("last_snapshot", "")
+    max_event_time = last_processed_time
+
+    filtered_events = []
     for e in events:
+        if e["time"] > last_processed_time:
+            filtered_events.append(e)
+            if e["time"] > max_event_time:
+                max_event_time = e["time"]
+    
+    logger.info(f"Processing {len(filtered_events)} new events (filtered from {len(events)})")
+
+    for e in filtered_events:
         identity = e["identity"]
         etype = e["event"]
 
@@ -136,6 +148,9 @@ def update_temporal_risk(events):
 
     # Apply decay and classification to ALL identities
     for identity, s in state.items():
+        if identity == "_meta":
+            continue
+            
         old_level = s["risk_level"]
         
         # Apply standard decay to everyone
@@ -162,6 +177,11 @@ def update_temporal_risk(events):
                 f"High risk maintained for {identity} ({s['exe']}): "
                 f"score {s['risk_score']}"
             )
+
+    # Update metadata
+    if "_meta" not in state:
+        state["_meta"] = {}
+    state["_meta"]["last_snapshot"] = max_event_time
 
     save_state(state)
     logger.info(f"Risk update complete: {len(state)} process(es) in state")
