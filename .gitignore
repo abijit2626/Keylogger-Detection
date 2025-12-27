@@ -2,3 +2,14 @@ venv/
 # Debug helpers (local only)
 debug_modules.py
 debug_processes.py
+
+# Logs
+logs/
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
