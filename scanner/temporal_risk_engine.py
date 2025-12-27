@@ -14,6 +14,8 @@ DECAY = 3
 MEDIUM = 30
 HIGH = 60
 
+print("[DEBUG] RISK ENGINE:", __file__)
+
 
 def load_state():
     if not os.path.exists(STATE_FILE):

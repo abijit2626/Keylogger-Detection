@@ -13,6 +13,8 @@ SCANNER = "scanner.scanner"
 ANALYZER = "scanner.temporal_analyzer"
 EVENT_FILE = "temporal_events.json"
 
+print("[DEBUG] CONTROLLER:", __file__)
+
 
 def run(module):
     return subprocess.run(
